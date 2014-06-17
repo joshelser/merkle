@@ -99,7 +99,7 @@ public class GenerateHashes {
   public void run(final Connector conn, final String inputTableName, final String outputTableName, String digestName, int numThreads) throws TableNotFoundException,
       AccumuloSecurityException, AccumuloException, NoSuchAlgorithmException {
     if (!conn.tableOperations().exists(outputTableName)) {
-      throw new IllegalArgumentException("Expected " + outputTableName + " to already exist");
+      throw new IllegalArgumentException(outputTableName + " does not exist, please create it");
     }
 
     Collection<Text> endRows = conn.tableOperations().listSplits(inputTableName);
