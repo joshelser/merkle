@@ -14,13 +14,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.accumulo.test.merkle;
+package org.apache.accumulo.test.merkle.cli;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.TreeSet;
 
 import org.apache.accumulo.core.data.Range;
+import org.apache.accumulo.test.merkle.cli.GenerateHashes;
 import org.apache.hadoop.io.Text;
 import org.junit.Assert;
 import org.junit.Test;

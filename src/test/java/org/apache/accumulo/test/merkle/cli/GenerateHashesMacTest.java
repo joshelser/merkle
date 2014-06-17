@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.accumulo.test.merkle;
+package org.apache.accumulo.test.merkle.cli;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -36,7 +36,8 @@ import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.minicluster.MiniAccumuloCluster;
 import org.apache.accumulo.minicluster.MiniAccumuloConfig;
-import org.apache.accumulo.test.merkle.GenerateHashes.GenerateHashesOpts;
+import org.apache.accumulo.test.merkle.cli.GenerateHashes;
+import org.apache.accumulo.test.merkle.cli.GenerateHashes.GenerateHashesOpts;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.io.Text;
 import org.junit.After;
