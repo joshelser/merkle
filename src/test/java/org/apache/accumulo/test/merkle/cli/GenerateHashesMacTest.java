@@ -136,8 +136,8 @@ public class GenerateHashesMacTest {
 
     conn.tableOperations().create(outputTable);
 
-    GenerateHashes generate = new GenerateHashes(opts);
-    generate.run();
+    GenerateHashes generate = new GenerateHashes();
+    generate.run(opts);
 
     List<Key> expectedKeys = new ArrayList<>(Arrays.asList(new Key("", "", "1\0"), new Key("1\0", "", "2\0"), new Key("2\0", "", "3\0"), new Key("3\0", "", "4\0"), new Key(
         "4\0", "", "")));

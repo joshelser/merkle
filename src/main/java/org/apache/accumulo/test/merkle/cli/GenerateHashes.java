@@ -30,11 +30,14 @@ import java.util.concurrent.Executors;
 
 import org.apache.accumulo.core.cli.BatchWriterOpts;
 import org.apache.accumulo.core.cli.ClientOnRequiredTable;
+import org.apache.accumulo.core.client.AccumuloException;
+import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.BatchWriter;
 import org.apache.accumulo.core.client.BatchWriterConfig;
 import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.MutationsRejectedException;
 import org.apache.accumulo.core.client.Scanner;
+import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.data.Key;
 import org.apache.accumulo.core.data.Mutation;
 import org.apache.accumulo.core.data.Range;
@@ -58,7 +61,7 @@ public class GenerateHashes {
     @Parameter(names = {"-hash", "--hash"}, required = true, description = "type of hash to use")
     private String hashName;
 
-    @Parameter(names = {"-o", "--output"}, required = true, description = "output table name")
+    @Parameter(names = {"-o", "--output"}, required = true, description = "output table name, expected to exist and be writable")
     private String outputTableName;
 
     @Parameter(names = {"-nt", "--numThreads"}, required = false, description = "number of concurrent threads calculating digests")
@@ -89,44 +92,38 @@ public class GenerateHashes {
     }
   }
 
-  private GenerateHashesOpts opts;
-
-  // For testing purposes only
-  protected GenerateHashes() {}
-
-  public GenerateHashes(GenerateHashesOpts opts) {
-    this.opts = opts;
+  public void run(GenerateHashesOpts opts) throws TableNotFoundException, AccumuloSecurityException, AccumuloException, NoSuchAlgorithmException {
+    run(opts.getConnector(), opts.getTableName(), opts.getOutputTableName(), opts.getHashName(), opts.getNumThreads());
   }
 
-  public void run() throws Exception {
-    final Connector conn = opts.getConnector();
-
-    if (!conn.tableOperations().exists(opts.getOutputTableName())) {
-      throw new IllegalArgumentException("Expected " + opts.getOutputTableName() + " to already exist");
+  public void run(final Connector conn, final String inputTableName, final String outputTableName, String digestName, int numThreads) throws TableNotFoundException,
+      AccumuloSecurityException, AccumuloException, NoSuchAlgorithmException {
+    if (!conn.tableOperations().exists(outputTableName)) {
+      throw new IllegalArgumentException("Expected " + outputTableName + " to already exist");
     }
 
-    Collection<Text> endRows = conn.tableOperations().listSplits(opts.getTableName());
+    Collection<Text> endRows = conn.tableOperations().listSplits(inputTableName);
     TreeSet<Range> ranges = endRowsToRanges(endRows);
 
-    ExecutorService svc = Executors.newFixedThreadPool(opts.getNumThreads());
-    final BatchWriter bw = conn.createBatchWriter(opts.getOutputTableName(), new BatchWriterConfig());
+    ExecutorService svc = Executors.newFixedThreadPool(numThreads);
+    final BatchWriter bw = conn.createBatchWriter(outputTableName, new BatchWriterConfig());
 
     try {
       for (final Range range : ranges) {
-        final MessageDigest digest = getDigestAlgorithm(opts);
+        final MessageDigest digest = getDigestAlgorithm(digestName);
 
         svc.execute(new Runnable() {
-  
+
           @Override
           public void run() {
             Scanner s;
             try {
-              s = conn.createScanner(opts.getTableName(), Authorizations.EMPTY);
+              s = conn.createScanner(inputTableName, Authorizations.EMPTY);
             } catch (Exception e) {
-              log.error("Could not get scanner for " + opts.getTableName(), e);
+              log.error("Could not get scanner for " + inputTableName, e);
               throw new RuntimeException(e);
             }
-  
+
             s.setRange(range);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             for (Entry<Key,Value> entry : s) {
@@ -138,11 +135,11 @@ public class GenerateHashes {
                 log.error("Error writing {}", entry, e);
                 throw new RuntimeException(e);
               }
-  
+
               digest.update(baos.toByteArray());
               baos.reset();
             }
-  
+
             Value v = new Value(digest.digest());
 
             // Log some progress
@@ -187,7 +184,7 @@ public class GenerateHashes {
     for (Text endRow : sortedEndRows) {
       if (null == prevEndRow) {
         ranges.add(new Range(null, false, endRow, true));
-      } else { 
+      } else {
         ranges.add(new Range(prevEndRow, false, endRow, true));
       }
       prevEndRow = endRow;
@@ -198,8 +195,7 @@ public class GenerateHashes {
     return ranges;
   }
 
-  protected MessageDigest getDigestAlgorithm(GenerateHashesOpts opts) throws NoSuchAlgorithmException {
-    String digestName = opts.getHashName();
+  protected MessageDigest getDigestAlgorithm(String digestName) throws NoSuchAlgorithmException {
     return MessageDigest.getInstance(digestName);
   }
 
@@ -208,7 +204,7 @@ public class GenerateHashes {
     BatchWriterOpts bwOpts = new BatchWriterOpts();
     opts.parseArgs(GenerateHashes.class.getName(), args, bwOpts);
 
-    GenerateHashes generate = new GenerateHashes(opts);
-    generate.run();
+    GenerateHashes generate = new GenerateHashes();
+    generate.run(opts);
   }
 }

@@ -57,19 +57,17 @@ public class ComputeRootHash {
     }
   }
 
-  private ComputeRootHashOpts opts;
- 
-  public ComputeRootHash(ComputeRootHashOpts opts) {
-    this.opts = opts;
-  }
-
-  public byte[] getHash() throws AccumuloException, AccumuloSecurityException, TableNotFoundException, NoSuchAlgorithmException {
+  public byte[] getHash(ComputeRootHashOpts opts) throws AccumuloException, AccumuloSecurityException, TableNotFoundException, NoSuchAlgorithmException {
     Connector conn = opts.getConnector();
     String table = opts.getTableName();
 
+    return getHash(conn, table, opts.getHashName());
+  }
+
+  public byte[] getHash(Connector conn, String table, String hashName) throws TableNotFoundException, NoSuchAlgorithmException {
     List<MerkleTreeNode> leaves = getLeaves(conn, table);
 
-    MerkleTree tree = new MerkleTree(leaves, opts.getHashName());
+    MerkleTree tree = new MerkleTree(leaves, hashName);
 
     return tree.getRootNode().getHash();
   }
@@ -93,8 +91,8 @@ public class ComputeRootHash {
     ComputeRootHashOpts opts = new ComputeRootHashOpts();
     opts.parseArgs("ComputeRootHash", args);
 
-    ComputeRootHash computeRootHash = new ComputeRootHash(opts);
-    byte[] rootHash = computeRootHash.getHash();
+    ComputeRootHash computeRootHash = new ComputeRootHash();
+    byte[] rootHash = computeRootHash.getHash(opts);
 
     System.out.println(Hex.encodeHexString(rootHash));
   }
