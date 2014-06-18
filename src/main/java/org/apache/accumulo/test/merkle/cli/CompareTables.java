@@ -54,6 +54,9 @@ public class CompareTables {
     @Parameter(names = {"-hash", "--hash"}, required = true, description = "type of hash to use")
     private String hashName;
 
+    @Parameter(names = {"-iter", "--iterator"}, required = false, description = "Should pushdown digest to iterators")
+    private boolean iteratorPushdown = false;
+
     public List<String> getTables() {
       return this.tables;
     }
@@ -76,6 +79,14 @@ public class CompareTables {
 
     public void setHashName(String hashName) {
       this.hashName = hashName;
+    }
+
+    public boolean isIteratorPushdown() {
+      return iteratorPushdown;
+    }
+
+    public void setIteratorPushdown(boolean iteratorPushdown) {
+      this.iteratorPushdown = iteratorPushdown;
     }
   }
 
@@ -102,7 +113,7 @@ public class CompareTables {
       
       GenerateHashes genHashes = new GenerateHashes();
       try {
-        genHashes.run(opts.getConnector(), table, table + "_merkle", opts.getHashName(), opts.getNumThreads());
+        genHashes.run(opts.getConnector(), table, table + "_merkle", opts.getHashName(), opts.getNumThreads(), opts.isIteratorPushdown());
       } catch (Exception e) {
         log.error("Error generating hashes for {}", table, e);
         throw new RuntimeException(e);

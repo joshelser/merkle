@@ -35,6 +35,7 @@ import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.BatchWriter;
 import org.apache.accumulo.core.client.BatchWriterConfig;
 import org.apache.accumulo.core.client.Connector;
+import org.apache.accumulo.core.client.IteratorSetting;
 import org.apache.accumulo.core.client.MutationsRejectedException;
 import org.apache.accumulo.core.client.Scanner;
 import org.apache.accumulo.core.client.TableNotFoundException;
@@ -44,12 +45,14 @@ import org.apache.accumulo.core.data.Range;
 import org.apache.accumulo.core.data.Value;
 import org.apache.accumulo.core.security.Authorizations;
 import org.apache.accumulo.test.merkle.RangeSerialization;
+import org.apache.accumulo.test.merkle.skvi.DigestIterator;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.hadoop.io.Text;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.beust.jcommander.Parameter;
+import com.google.common.collect.Iterables;
 
 /**
  * 
@@ -66,6 +69,9 @@ public class GenerateHashes {
 
     @Parameter(names = {"-nt", "--numThreads"}, required = false, description = "number of concurrent threads calculating digests")
     private int numThreads = 4;
+
+    @Parameter(names = {"-iter", "--iterator"}, required = false, description = "Should we push down logic with an iterator")
+    private boolean iteratorPushdown = false;
 
     public String getHashName() {
       return hashName;
@@ -90,13 +96,21 @@ public class GenerateHashes {
     public void setNumThreads(int numThreads) {
       this.numThreads = numThreads;
     }
+
+    public boolean isIteratorPushdown() {
+      return iteratorPushdown;
+    }
+
+    public void setIteratorPushdown(boolean iteratorPushdown) {
+      this.iteratorPushdown = iteratorPushdown;
+    }
   }
 
   public void run(GenerateHashesOpts opts) throws TableNotFoundException, AccumuloSecurityException, AccumuloException, NoSuchAlgorithmException {
-    run(opts.getConnector(), opts.getTableName(), opts.getOutputTableName(), opts.getHashName(), opts.getNumThreads());
+    run(opts.getConnector(), opts.getTableName(), opts.getOutputTableName(), opts.getHashName(), opts.getNumThreads(), opts.isIteratorPushdown());
   }
 
-  public void run(final Connector conn, final String inputTableName, final String outputTableName, String digestName, int numThreads) throws TableNotFoundException,
+  public void run(final Connector conn, final String inputTableName, final String outputTableName, final String digestName, int numThreads, final boolean iteratorPushdown) throws TableNotFoundException,
       AccumuloSecurityException, AccumuloException, NoSuchAlgorithmException {
     if (!conn.tableOperations().exists(outputTableName)) {
       throw new IllegalArgumentException(outputTableName + " does not exist, please create it");
@@ -125,27 +139,41 @@ public class GenerateHashes {
             }
 
             s.setRange(range);
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            for (Entry<Key,Value> entry : s) {
-              DataOutputStream out = new DataOutputStream(baos);
-              try {
-                entry.getKey().write(out);
-                entry.getValue().write(out);
-              } catch (Exception e) {
-                log.error("Error writing {}", entry, e);
-                throw new RuntimeException(e);
+
+            Value v = null;
+            Mutation m = null;
+            if (iteratorPushdown) {
+              IteratorSetting cfg = new IteratorSetting(50, DigestIterator.class);
+              cfg.addOption(DigestIterator.HASH_NAME_KEY, digestName);
+              s.addScanIterator(cfg);
+
+              // The scanner should only ever return us one Key-Value, otherwise this approach won't work
+              Entry<Key,Value> entry = Iterables.getOnlyElement(s);
+
+              v = entry.getValue();
+              m = RangeSerialization.toMutation(range, v);
+            } else {
+              ByteArrayOutputStream baos = new ByteArrayOutputStream();
+              for (Entry<Key,Value> entry : s) {
+                DataOutputStream out = new DataOutputStream(baos);
+                try {
+                  entry.getKey().write(out);
+                  entry.getValue().write(out);
+                } catch (Exception e) {
+                  log.error("Error writing {}", entry, e);
+                  throw new RuntimeException(e);
+                }
+
+                digest.update(baos.toByteArray());
+                baos.reset();
               }
 
-              digest.update(baos.toByteArray());
-              baos.reset();
+              v = new Value(digest.digest());
+              m = RangeSerialization.toMutation(range, v);
             }
-
-            Value v = new Value(digest.digest());
 
             // Log some progress
             log.info("{} computed digest for {} of {}", Thread.currentThread().getName(), range, Hex.encodeHexString(v.get()));
-
-            Mutation m = RangeSerialization.toMutation(range, v);
 
             try {
               bw.addMutation(m);
