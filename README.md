@@ -1,7 +1,7 @@
 merkle
 ======
 
-Merkle trees (http://en.wikipedia.org/wiki/Merkle_tree) is a hash tree and can be used to evaluate equality over large files with the ability to ascertain what portions of the files differ. Each leaf of the Merkle tree is some hash of a portion of the file, with each leaf corresponding to some "range" within the source file. As such, if all leaves are considered as ranges of the source file, the "sum" of all leaves creates a contiguous range over the entire file.
+A Merkle tree (http://en.wikipedia.org/wiki/Merkle_tree) is a hash tree and can be used to evaluate equality over large files with the ability to ascertain what portions of the files differ. Each leaf of the Merkle tree is some hash of a portion of the file, with each leaf corresponding to some "range" within the source file. As such, if all leaves are considered as ranges of the source file, the "sum" of all leaves creates a contiguous range over the entire file.
 
 The parent of any nodes (typically, a binary tree; however this is not required) is the concatenation of the hashes of the children. We can construct a full tree by walking up the tree, creating parents from children, until we have a root node. To check equality of two files that each have a merkle tree built, we can very easily compare the value of at the root of the Merkle tree to know whether or not the files are the same.
 
