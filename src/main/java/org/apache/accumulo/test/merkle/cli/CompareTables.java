@@ -16,7 +16,9 @@
  */
 package org.apache.accumulo.test.merkle.cli;
 
+import java.io.FileNotFoundException;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +31,7 @@ import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.Connector;
 import org.apache.accumulo.core.client.TableExistsException;
 import org.apache.accumulo.core.client.TableNotFoundException;
+import org.apache.accumulo.core.data.Range;
 import org.apache.commons.codec.binary.Hex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +59,9 @@ public class CompareTables {
 
     @Parameter(names = {"-iter", "--iterator"}, required = false, description = "Should pushdown digest to iterators")
     private boolean iteratorPushdown = false;
+
+    @Parameter(names = {"-s", "--splits"}, required = false, description = "File of splits to use for merkle tree")
+    private String splitsFile = null;
 
     public List<String> getTables() {
       return this.tables;
@@ -88,6 +94,14 @@ public class CompareTables {
     public void setIteratorPushdown(boolean iteratorPushdown) {
       this.iteratorPushdown = iteratorPushdown;
     }
+
+    public String getSplitsFile() {
+      return splitsFile;
+    }
+
+    public void setSplitsFile(String splitsFile) {
+      this.splitsFile = splitsFile;
+    }
   }
 
   private CompareTablesOpts opts;
@@ -98,7 +112,8 @@ public class CompareTables {
     this.opts = opts;
   }
 
-  public Map<String,String> computeAllHashes() throws AccumuloException, AccumuloSecurityException, TableExistsException, NoSuchAlgorithmException, TableNotFoundException {
+  public Map<String,String> computeAllHashes() throws AccumuloException, AccumuloSecurityException, TableExistsException, NoSuchAlgorithmException,
+      TableNotFoundException, FileNotFoundException {
     final Connector conn = opts.getConnector();
     final Map<String,String> hashesByTable = new HashMap<>();
 
@@ -110,10 +125,12 @@ public class CompareTables {
       }
 
       conn.tableOperations().create(outputTableName);
-      
+
       GenerateHashes genHashes = new GenerateHashes();
+      Collection<Range> ranges = genHashes.getRanges(opts.getConnector(), table, opts.getSplitsFile());
+
       try {
-        genHashes.run(opts.getConnector(), table, table + "_merkle", opts.getHashName(), opts.getNumThreads(), opts.isIteratorPushdown());
+        genHashes.run(opts.getConnector(), table, table + "_merkle", opts.getHashName(), opts.getNumThreads(), opts.isIteratorPushdown(), ranges);
       } catch (Exception e) {
         log.error("Error generating hashes for {}", table, e);
         throw new RuntimeException(e);
@@ -132,6 +149,10 @@ public class CompareTables {
     CompareTablesOpts opts = new CompareTablesOpts();
     BatchWriterOpts bwOpts = new BatchWriterOpts();
     opts.parseArgs("CompareTables", args, bwOpts);
+
+    if (opts.isIteratorPushdown() && null != opts.getSplitsFile()) {
+      throw new IllegalArgumentException("Cannot use iterator pushdown with anything other than table split points");
+    }
 
     CompareTables compareTables = new CompareTables(opts);
     Map<String,String> tableToHashes = compareTables.computeAllHashes();

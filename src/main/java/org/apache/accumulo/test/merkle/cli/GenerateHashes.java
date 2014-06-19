@@ -18,11 +18,15 @@ package org.apache.accumulo.test.merkle.cli;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map.Entry;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
@@ -53,6 +57,7 @@ import org.slf4j.LoggerFactory;
 
 import com.beust.jcommander.Parameter;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 
 /**
  * 
@@ -72,6 +77,9 @@ public class GenerateHashes {
 
     @Parameter(names = {"-iter", "--iterator"}, required = false, description = "Should we push down logic with an iterator")
     private boolean iteratorPushdown = false;
+
+    @Parameter(names = {"-s", "--splits"}, required = false, description = "File of splits to use for merkle tree")
+    private String splitsFile = null;
 
     public String getHashName() {
       return hashName;
@@ -104,20 +112,55 @@ public class GenerateHashes {
     public void setIteratorPushdown(boolean iteratorPushdown) {
       this.iteratorPushdown = iteratorPushdown;
     }
+
+    public String getSplitsFile() {
+      return splitsFile;
+    }
+
+    public void setSplitsFile(String splitsFile) {
+      this.splitsFile = splitsFile;
+    }
   }
 
-  public void run(GenerateHashesOpts opts) throws TableNotFoundException, AccumuloSecurityException, AccumuloException, NoSuchAlgorithmException {
-    run(opts.getConnector(), opts.getTableName(), opts.getOutputTableName(), opts.getHashName(), opts.getNumThreads(), opts.isIteratorPushdown());
+  public Collection<Range> getRanges(Connector conn, String tableName, String splitsFile) throws TableNotFoundException, AccumuloSecurityException, AccumuloException, FileNotFoundException {
+    if (null == splitsFile) {
+      Collection<Text> endRows = conn.tableOperations().listSplits(tableName);
+      return endRowsToRanges(endRows);
+    } else {
+      ArrayList<Text> splits = new ArrayList<Text>();
+
+      String line;
+      java.util.Scanner file = new java.util.Scanner(new File(splitsFile), StandardCharsets.UTF_8.name());
+      List<Text> result = Lists.newArrayList();
+      try {
+        while (file.hasNextLine()) {
+          line = file.nextLine();
+          if (!line.isEmpty()) {
+            result.add(new Text(line));
+          }
+        }
+      } finally {
+        file.close();
+      }
+
+      Collections.sort(splits);
+      return endRowsToRanges(splits);
+    }
   }
 
-  public void run(final Connector conn, final String inputTableName, final String outputTableName, final String digestName, int numThreads, final boolean iteratorPushdown) throws TableNotFoundException,
-      AccumuloSecurityException, AccumuloException, NoSuchAlgorithmException {
+  public void run(GenerateHashesOpts opts) throws TableNotFoundException, AccumuloSecurityException, AccumuloException, NoSuchAlgorithmException,
+      FileNotFoundException {
+    Collection<Range> ranges = getRanges(opts.getConnector(), opts.getTableName(), opts.getSplitsFile());
+
+    run(opts.getConnector(), opts.getTableName(), opts.getOutputTableName(), opts.getHashName(), opts.getNumThreads(), opts.isIteratorPushdown(), ranges);
+  }
+
+  public void run(final Connector conn, final String inputTableName, final String outputTableName, final String digestName, int numThreads,
+      final boolean iteratorPushdown, final Collection<Range> ranges) throws TableNotFoundException, AccumuloSecurityException, AccumuloException,
+      NoSuchAlgorithmException {
     if (!conn.tableOperations().exists(outputTableName)) {
       throw new IllegalArgumentException(outputTableName + " does not exist, please create it");
     }
-
-    Collection<Text> endRows = conn.tableOperations().listSplits(inputTableName);
-    TreeSet<Range> ranges = endRowsToRanges(endRows);
 
     ExecutorService svc = Executors.newFixedThreadPool(numThreads);
     final BatchWriter bw = conn.createBatchWriter(outputTableName, new BatchWriterConfig());
@@ -203,7 +246,7 @@ public class GenerateHashes {
     }
   }
 
-  protected TreeSet<Range> endRowsToRanges(Collection<Text> endRows) {
+  public TreeSet<Range> endRowsToRanges(Collection<Text> endRows) {
     ArrayList<Text> sortedEndRows = new ArrayList<Text>(endRows);
     Collections.sort(sortedEndRows);
 
@@ -231,6 +274,10 @@ public class GenerateHashes {
     GenerateHashesOpts opts = new GenerateHashesOpts();
     BatchWriterOpts bwOpts = new BatchWriterOpts();
     opts.parseArgs(GenerateHashes.class.getName(), args, bwOpts);
+
+    if (opts.isIteratorPushdown() && null != opts.getSplitsFile()) {
+      throw new IllegalArgumentException("Cannot use iterator pushdown with anything other than table split points");
+    }
 
     GenerateHashes generate = new GenerateHashes();
     generate.run(opts);
