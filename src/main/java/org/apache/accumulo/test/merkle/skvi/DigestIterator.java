@@ -47,8 +47,6 @@ public class DigestIterator implements SortedKeyValueIterator<Key,Value> {
 
   @Override
   public void init(SortedKeyValueIterator<Key,Value> source, Map<String,String> options, IteratorEnvironment env) throws IOException {
-    log.info("init()");
-
     String hashName = options.get(HASH_NAME_KEY);
     if (null == hashName) {
       throw new IOException(HASH_NAME_KEY + " must be provided as option");
@@ -67,14 +65,11 @@ public class DigestIterator implements SortedKeyValueIterator<Key,Value> {
 
   @Override
   public boolean hasTop() {
-    log.info("hasTop()");
-
     return null != topKey;
   }
 
   @Override
   public void next() throws IOException {
-    log.info("next()");
     // We can't call next() if we already consumed it all
     if (!this.source.hasTop()) {
       this.topKey = null;
@@ -89,7 +84,6 @@ public class DigestIterator implements SortedKeyValueIterator<Key,Value> {
 
   @Override
   public void seek(Range range, Collection<ByteSequence> columnFamilies, boolean inclusive) throws IOException {
-    log.info("seek()");
     this.source.seek(range, columnFamilies, inclusive);
 
     consume();
@@ -128,14 +122,11 @@ public class DigestIterator implements SortedKeyValueIterator<Key,Value> {
 
   @Override
   public Key getTopKey() {
-    log.info("getTopKey()");
-
     return topKey;
   }
 
   @Override
   public Value getTopValue() {
-    log.info("getTopValue()");
     return topValue;
   }
 
