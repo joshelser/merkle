@@ -90,3 +90,13 @@ accumulo org.apache.accumulo.test.merkle.cli.CompareTables --tables table1 table
 
 The options here are very similar to the other commands, except the `--tables` option now accepts multiple Accumulo
 tables.
+
+### Generate some random data
+
+A simple workload generation tool is provided. It will generate a number of records, with random rows, cfs and cqs. The number of
+rows, cfs, and cqs can be provided on the command line. Additionally, the percentage of these records which are deletes can be
+specified by the user, defaulting to 5% of records being deletes.
+
+```
+accumulo org.apache.accumulo.test.merkle.ingest.RandomWorkload --table random -i accumulo -z localhost -u root -p secret -d 0 -cf 10 -cq 100 -r 1000000 -n 100000000
+```
